@@ -256,3 +256,6 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+# Local Korean job tracker state
+/results/korean_de_jobs.sqlite3*
+/results/korean_de_daily.json

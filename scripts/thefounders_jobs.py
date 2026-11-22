@@ -34,7 +34,7 @@ def posting_url(url):
     return None
 
 
-def discover(xml):
+def discover_entries(xml):
     postings = {}
     for node in ElementTree.fromstring(xml).findall("{*}url"):
         url = posting_url(node.findtext("{*}loc", ""))
@@ -42,7 +42,11 @@ def discover(xml):
             postings[url] = node.findtext("{*}lastmod", "")
     if not postings:
         raise ValueError("No posting URLs found in the careers sitemap")
-    return sorted(postings, key=postings.get, reverse=True)
+    return dict(sorted(postings.items(), key=lambda entry: entry[1], reverse=True))
+
+
+def discover(xml):
+    return list(discover_entries(xml))
 
 
 def parse_posting(html, url):
