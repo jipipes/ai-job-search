@@ -9,11 +9,25 @@
 
 `daily`는 더파운더즈 공식 사이트맵을 확인해 신규 공고와 본문이 변경된 공고를 보여줍니다. 실행당 최대 15건을 읽으며, `remaining`은 다음 실행에서 처리할 건수입니다. `jobs`는 이미 수집한 공고를 보여줍니다. SQLite 파일은 `results/korean_de_jobs.sqlite3`에 저장됩니다. 사이트맵 수정 시각이 그대로인 공고도 7일 후에 재확인합니다.
 
+## 수집원
+
+`daily`는 아래 수집원을 차례로 확인합니다. 한 수집원이 실패해도 나머지는 계속 진행하며, 결과의 `sources`에 수집원별 발견·남은 건수가 표시됩니다.
+
+| 수집원 | 방식 | 비고 |
+|---|---|---|
+| 더파운더즈 | 공식 사이트맵 + 상세 HTML | 실행당 상세 15건 |
+| 점핏 | 점핏 웹이 쓰는 공고 목록·상세 JSON | 빅데이터·AI/ML·백엔드·DBA·DevOps 분류. 목록의 최소 경력이 3년 이상인 공고는 상세를 읽지 않음. 실행당 상세 60건 |
+| 사람인 | 공식 Open API | `SARAMIN_ACCESS_KEY`가 있을 때만. IT개발·데이터 직무, 헤드헌팅 제외. 본문이 없어 직무 코드·키워드로 판단 |
+
+사람인 키는 [사람인 Open API](https://oapi.saramin.co.kr/)에서 이용 신청 후 받은 access-key를 `~/.config/job-tracker.env`의 `SARAMIN_ACCESS_KEY=`에 넣습니다. 원티드·잡코리아·리멤버·슈퍼루키·자소설닷컴·로켓펀치는 robots.txt나 접근 차단으로 자동 수집하지 않습니다.
+
+`track`은 더파운더즈 ID, 점핏 숫자 ID, 또는 수집된 공고의 URL을 받습니다.
+
 ## 신규 데이터 직무 공고 Slack 알림
 
 `daily` 결과의 각 공고에는 `relevant`, `data_matches`, `min_years`가 붙습니다. 직무명이 데이터 엔지니어·애널리틱스 엔지니어·백엔드·FDE 등으로 섞여 있어 제목 대신 주요 업무·자격 요건·우대 사항의 내용을 봅니다.
 
-- `data_matches`: 본문에서 찾은 데이터 작업 표현(SQL, Airflow, dbt, Spark, Kafka, 파이프라인, DW/DL 등). 2개 이상이면 데이터 직무로 봅니다.
+- `data_matches`: 본문에서 찾은 표현. 데이터 작업 표현(SQL, Airflow, dbt, Spark, Kafka, 파이프라인, DW/DL 등)이 2개 이상이면 `category: 데이터`입니다. 데이터 표현과 인접 기술 표현(Python, AI/ML·LLM, 백엔드·API, 클라우드, 컨테이너, 데이터 분석, BI, FDE·솔루션 엔지니어 등)을 합쳐 2개 이상이면 `category: 인접`으로 함께 알립니다.
 - `min_years`: 자격 요건(우대 사항 제외)에 적힌 최소 경력 연수. 3년 이상이면 제외합니다.
 
 `SLACK_NEW_POSTINGS_WEBHOOK_URL`을 설정하면 `relevant`인 공고를 한 메시지로 묶어 보냅니다. 같은 공고는 한 번만 보내며 기록은 SQLite의 `posting_notifications`에 남깁니다. 기준은 `scripts/posting_filter.py`의 `DATA_TERMS`, `MIN_DATA_MATCHES`, `MAX_YEARS`에서 조정합니다.

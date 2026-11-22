@@ -14,6 +14,7 @@ from xml.etree import ElementTree
 
 import requests
 
+from scripts import job_sources as sources
 from scripts import posting_filter
 from scripts import thefounders_jobs as founders
 from scripts.job_tracker_notion import (
@@ -30,12 +31,7 @@ def collect(db, session, limit, now):
     if not robots.can_fetch(founders.USER_AGENT, founders.SITEMAP):
         raise ValueError("Sitemap access is disallowed by robots.txt")
     entries = founders.discover_entries(founders.fetch(session, founders.SITEMAP))
-    existing = {
-        url: (lastmod, checked_at, payload)
-        for url, lastmod, checked_at, payload in db.execute(
-            "SELECT url, lastmod, checked_at, payload FROM postings"
-        )
-    }
+    existing = _existing(db)
     due = []
     for url, lastmod in entries.items():
         previous = existing.get(url)
@@ -55,27 +51,100 @@ def collect(db, session, limit, now):
         except (requests.RequestException, ValueError) as error:
             errors.append({"url": url, "error": str(error)})
             continue
-        payload = json.dumps(job, ensure_ascii=False, sort_keys=True)
-        previous = existing.get(url)
-        if previous is None or previous[2] != payload:
-            changes.append({
-                "change": "new" if previous is None else "updated",
-                "id": url.rsplit("/", 1)[-1],
-                "title": job["title"],
-                "url": url,
-                "entry_level_eligible": job["entry_level_eligible"],
-                "deadline_date": job.get("deadline_date"),
-                **posting_filter.review(job),
-            })
-        db.execute(
-            """INSERT INTO postings (url, lastmod, checked_at, payload) VALUES (?, ?, ?, ?)
-               ON CONFLICT(url) DO UPDATE SET
-               lastmod=excluded.lastmod, checked_at=excluded.checked_at, payload=excluded.payload""",
-            (url, entries[url], now.isoformat(), payload),
-        )
+        store(db, existing, url, entries[url], job, now, changes)
     return {"checked_at": now.isoformat(), "discovered": len(entries),
             "remaining": max(0, len(due) - limit) + len(errors),
             "changes": changes, "errors": errors}
+
+
+def _existing(db):
+    return {
+        url: (lastmod, checked_at, payload)
+        for url, lastmod, checked_at, payload in db.execute(
+            "SELECT url, lastmod, checked_at, payload FROM postings"
+        )
+    }
+
+
+def store(db, existing, url, version, job, now, changes):
+    """Save a posting and record it in ``changes`` when it is new or its content changed."""
+    payload = json.dumps(job, ensure_ascii=False, sort_keys=True)
+    previous = existing.get(url)
+    if previous is None or previous[2] != payload:
+        changes.append({
+            "change": "new" if previous is None else "updated",
+            "source": job.get("source", "thefounders"),
+            "id": url.rstrip("/").rsplit("/", 1)[-1],
+            "company": job.get("company"),
+            "title": job["title"],
+            "url": url,
+            "entry_level_eligible": job["entry_level_eligible"],
+            "deadline_date": job.get("deadline_date"),
+            **posting_filter.review(job),
+        })
+    db.execute(
+        """INSERT INTO postings (url, lastmod, checked_at, payload) VALUES (?, ?, ?, ?)
+           ON CONFLICT(url) DO UPDATE SET
+           lastmod=excluded.lastmod, checked_at=excluded.checked_at, payload=excluded.payload""",
+        (url, version, now.isoformat(), payload),
+    )
+
+
+def collect_source(db, entries, now, limit, fetch=None, pause=1.0):
+    """Store postings from ``entries`` (url, version, item) that are new, changed or stale.
+
+    ``fetch(item)`` turns a listing into a full job (one request each, capped by
+    ``limit``); without it the item already is the job.
+    """
+    existing = _existing(db)
+    entries = list(entries)
+    due = [
+        (url, version, item) for url, version, item in entries
+        if url not in existing or existing[url][0] != version
+        or datetime.fromisoformat(existing[url][1]) <= now - timedelta(days=7)
+    ]
+    batch = due[:limit] if fetch else due
+    changes, errors = [], []
+    for index, (url, version, item) in enumerate(batch):
+        try:
+            if fetch:
+                if index:
+                    time.sleep(pause)
+                job = fetch(item)
+            else:
+                job = item
+        except (requests.RequestException, ValueError, KeyError) as error:
+            errors.append({"url": url, "error": str(error)})
+            continue
+        store(db, existing, url, version, job, now, changes)
+    return {"discovered": len(entries), "remaining": len(due) - len(batch) + len(errors),
+            "changes": changes, "errors": errors}
+
+
+def run_daily(db, session, limit, now):
+    """Run every configured source; one failing source does not stop the others."""
+    result = {"checked_at": now.isoformat(), "sources": {}, "changes": [], "errors": []}
+    max_years = posting_filter.MAX_YEARS
+    runs = [("thefounders", lambda: collect(db, session, limit, now))]
+    runs.append(("jumpit", lambda: collect_source(
+        db, sources.jumpit_entries(session, max_years), now, max(limit, sources.JUMPIT_DAILY_DETAILS),
+        fetch=lambda item: sources.jumpit_fetch(session, item))))
+    key = os.environ.get("SARAMIN_ACCESS_KEY")
+    if key:
+        runs.append(("saramin", lambda: collect_source(
+            db, sources.saramin_entries(session, key, max_years), now, limit)))
+    for name, run in runs:
+        try:
+            outcome = run()
+        except (requests.RequestException, ValueError, KeyError, ElementTree.ParseError) as error:
+            result["errors"].append({"source": name, "error": str(error)})
+            continue
+        result["sources"][name] = {"discovered": outcome["discovered"],
+                                   "remaining": outcome["remaining"],
+                                   "changes": len(outcome["changes"])}
+        result["changes"] += outcome["changes"]
+        result["errors"] += [{"source": name, **error} for error in outcome["errors"]]
+    return result
 
 
 def register_notion(session, data_source, job, fields=TrackerFields()):
@@ -136,7 +205,7 @@ def main():
             )""")
             if args.command == "daily":
                 db.execute("BEGIN IMMEDIATE")
-                result = collect(db, session, args.limit, datetime.now(SEOUL))
+                result = run_daily(db, session, args.limit, datetime.now(SEOUL))
                 webhook = os.environ.get("SLACK_NEW_POSTINGS_WEBHOOK_URL")
                 relevant = [item for item in result["changes"] if item["relevant"]]
                 if webhook and relevant:
@@ -175,11 +244,16 @@ def main():
                         with requests.Session() as slack:
                             result = send_reminders(db, slack, webhook, reminders)
                 else:
-                    url = founders.posting_url(args.posting) or founders.posting_url(
-                        f"{founders.BASE}/job_posting/{args.posting}"
-                    )
                     db.execute("BEGIN IMMEDIATE")
-                    row = db.execute("SELECT payload FROM postings WHERE url=?", (url,)).fetchone()
+                    row = None
+                    for url in (args.posting, founders.posting_url(args.posting),
+                                founders.posting_url(f"{founders.BASE}/job_posting/{args.posting}"),
+                                sources.JUMPIT_WEB + args.posting):
+                        if url:
+                            row = db.execute("SELECT payload FROM postings WHERE url=?",
+                                             (url,)).fetchone()
+                        if row:
+                            break
                     if row is None:
                         raise ValueError("Posting is absent from the local cache. Run daily first.")
                     result = register_notion(session, data_source, json.loads(row[0]), fields)

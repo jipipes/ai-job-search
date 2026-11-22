@@ -22,6 +22,17 @@ def test_content_decides_relevance_whatever_the_title():
     assert {"SQL", "Airflow", "dbt"} <= set(review(bi)["data_matches"])
 
 
+def test_adjacent_ai_and_backend_roles_are_kept_and_labelled():
+    ai = job("AI Engineer", duties=["LLM 기반 RAG 서비스 개발"], requirements=["Python 활용 능력"])
+    backend = job("Server Developer", duties=["Spring 기반 API 개발"], requirements=["AWS 사용 경험"])
+    pipeline = job("Data Engineer", duties=["Airflow 파이프라인 운영", "SQL 모델링"])
+    designer = job("모션그래픽 디자이너", duties=["3D/AI영상 제작"])
+    assert review(ai)["category"] == "인접" and review(ai)["relevant"]
+    assert review(backend)["category"] == "인접" and review(backend)["relevant"]
+    assert review(pipeline)["category"] == "데이터"
+    assert not review(designer)["relevant"]
+
+
 def test_three_or_more_required_years_are_excluded():
     base = dict(duties=["데이터 파이프라인 개발", "Spark 배치 처리"])
     assert min_years_required(job("DE", requirements=["데이터 엔지니어링 경력 3년 이상"])) == 3
@@ -45,5 +56,5 @@ def test_digest_is_sent_once_per_posting():
         assert notify_new_postings(db, session, webhook, [item]) == {"sent": 1}
         assert notify_new_postings(db, session, webhook, [item]) == {"sent": 0}
     text = session.post.call_args.kwargs["json"]["text"]
-    assert "채용 시 마감" in text and "SQL, Airflow" in text
+    assert "채용 시 마감" in text and "SQL, Airflow" in text and "[데이터]" in text
     assert session.post.call_count == 1

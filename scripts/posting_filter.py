@@ -32,6 +32,21 @@ DATA_TERMS = {
     "데이터 엔지니어": r"데이터\s*엔지니어|data\s*engineer|analytics\s*engineer|애널리틱스\s*엔지니어",
     "데이터 품질": r"데이터\s*(품질|정합성|거버넌스)|data\s*(quality|governance)",
 }
+# Neighbouring work a data-engineering newcomer can still apply to (AI, ML, backend,
+# analytics, cloud). These count toward relevance but mark the posting as "인접".
+ADJACENT_TERMS = {
+    "Python": r"python|파이썬|pandas|numpy",
+    "AI/ML": r"머신\s*러닝|딥\s*러닝|machine\s*learning|deep\s*learning|(?<![a-z])(ml|mlops|llm|rag)(?![a-z])"
+             r"|pytorch|tensorflow|ai\s*(엔지니어|engineer|모델|model|개발|서비스|에이전트|agent|플랫폼|research|리서치)",
+    "백엔드": r"백엔드|back[\s-]?end|서버\s*개발|server\s*develop|(?<![a-z])api(?![a-z])",
+    "JVM/Go": r"(?<![a-z])(java|kotlin|spring|go|golang|scala)(?![a-z])",
+    "클라우드": r"(?<![a-z])(aws|gcp|azure)(?![a-z])|클라우드|cloud",
+    "컨테이너": r"docker|kubernetes|(?<![a-z])k8s(?![a-z])|컨테이너",
+    "데이터 분석": r"데이터\s*(분석|사이언스|사이언티스트)|data\s*(analy|scien)|통계|statistic",
+    "BI/대시보드": r"(?<![a-z])bi(?![a-z])|tableau|looker|superset|power\s*bi|대시보드|dashboard",
+    "FDE/솔루션": r"forward\s*deployed|(?<![a-z])fde(?![a-z])|솔루션\s*엔지니어|solutions?\s*engineer",
+    "개발 직무": r"개발자|소프트웨어\s*엔지니어|software\s*engineer|developer",
+}
 MIN_DATA_MATCHES = 2
 MAX_YEARS = 3  # postings that require this many years or more are dropped
 
@@ -49,10 +64,17 @@ def _lines(job, *keys):
         yield from ([value] if isinstance(value, str) else value)
 
 
-def data_matches(job):
-    text = "\n".join([job.get("title", ""), *_lines(
+def _body(job):
+    return "\n".join([job.get("title", ""), *_lines(
         job, "duties", "requirements", "preferred_requirements")]).lower()
-    return [label for label, pattern in DATA_TERMS.items() if re.search(pattern, text)]
+
+
+def _matches(terms, text):
+    return [label for label, pattern in terms.items() if re.search(pattern, text)]
+
+
+def data_matches(job):
+    return _matches(DATA_TERMS, _body(job))
 
 
 def min_years_required(job):
@@ -68,10 +90,24 @@ def min_years_required(job):
 
 
 def review(job):
-    matches = data_matches(job)
+    """Keep anything a data/AI/backend newcomer could plausibly apply to.
+
+    "데이터" when two or more data-engineering terms appear; "인접" when data and
+    neighbouring tech terms together reach two. Three or more required years drops it.
+    """
+    text = _body(job)
+    data = _matches(DATA_TERMS, text)
+    adjacent = _matches(ADJACENT_TERMS, text)
     years = min_years_required(job)
-    relevant = len(matches) >= MIN_DATA_MATCHES and (years is None or years < MAX_YEARS)
-    return {"relevant": relevant, "data_matches": matches, "min_years": years}
+    if len(data) >= MIN_DATA_MATCHES:
+        category = "데이터"
+    elif len(data) + len(adjacent) >= MIN_DATA_MATCHES:
+        category = "인접"
+    else:
+        category = None
+    relevant = category is not None and (years is None or years < MAX_YEARS)
+    return {"relevant": relevant, "category": category,
+            "data_matches": data + adjacent, "min_years": years}
 
 
 def notify_new_postings(db, session, webhook, postings):
@@ -82,10 +118,17 @@ def notify_new_postings(db, session, webhook, postings):
         "SELECT 1 FROM posting_notifications WHERE url=?", (item["url"],)).fetchone()]
     if not fresh:
         return {"sent": 0}
-    lines = [f"새 데이터 직무 공고 {len(fresh)}건"]
+    fresh.sort(key=lambda item: item.get("category") != "데이터")
+    lines = [f"새 지원 후보 공고 {len(fresh)}건"]
     for item in fresh:
         deadline = item.get("deadline_date") or "채용 시 마감"
-        lines.append(f"• {item['title']} · {deadline}\n  매칭: {', '.join(item['data_matches'])}\n  {item['url']}")
+        label = item.get("category") or "데이터"
+        title = item["title"]
+        company = item.get("company")
+        if company and item.get("source", "thefounders") != "thefounders" and company not in title:
+            title = f"{company} / {title}"
+        lines.append(f"• [{label}] {title} · {deadline}\n"
+                     f"  매칭: {', '.join(item['data_matches'])}\n  {item['url']}")
     try:
         response = session.post(webhook, timeout=15, allow_redirects=False, json={
             "text": "\n".join(lines), "mrkdwn": False, "unfurl_links": False,
