@@ -1,2 +1,5 @@
 python-docx>=1.2.0
 beautifulsoup4>=4.15.0
+PyYAML
+requests
+Jinja2
