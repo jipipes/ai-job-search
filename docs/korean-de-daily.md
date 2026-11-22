@@ -17,9 +17,13 @@
 |---|---|---|
 | 더파운더즈 | 공식 사이트맵 + 상세 HTML | 실행당 상세 15건 |
 | 점핏 | 점핏 웹이 쓰는 공고 목록·상세 JSON | 빅데이터·AI/ML·백엔드·DBA·DevOps 분류. 목록의 최소 경력이 3년 이상인 공고는 상세를 읽지 않음. 실행당 상세 60건 |
+| 링커리어 | 공개 목록·상세 페이지의 `__NEXT_DATA__` | IT/개발 분류(AI/ML·DevOps 포함). 본문을 업무·자격·우대로 나눠 판단. 실행당 상세 60건. 이미지로만 된 공고는 제목으로만 판단 |
 | 사람인 | 공식 Open API | `SARAMIN_ACCESS_KEY`가 있을 때만. IT개발·데이터 직무, 헤드헌팅 제외. 본문이 없어 직무 코드·키워드로 판단 |
+| 고용24 | 공식 채용정보 Open API | `WORK24_AUTH_KEY`가 있을 때만. 최근 1개월 상용직을 데이터·AI·백엔드 키워드로 검색. 본문이 없어 제목·검색어·경력으로 판단 |
 
-사람인 키는 [사람인 Open API](https://oapi.saramin.co.kr/)에서 이용 신청 후 받은 access-key를 `~/.config/job-tracker.env`의 `SARAMIN_ACCESS_KEY=`에 넣습니다. 원티드·잡코리아·리멤버·슈퍼루키·자소설닷컴·로켓펀치는 robots.txt나 접근 차단으로 자동 수집하지 않습니다.
+사람인 키는 [사람인 Open API](https://oapi.saramin.co.kr/), 고용24 인증키는 [고용24 Open API](https://www.work24.go.kr/cm/e/a/0110/selectOpenApiIntro.do)에서 신청합니다. 받은 키는 `~/.config/job-tracker.env`의 `SARAMIN_ACCESS_KEY=`, `WORK24_AUTH_KEY=`에 넣습니다.
+
+원티드·잡코리아·잡플래닛·리멤버·슈퍼루키·자소설닷컴·로켓펀치·인디드·글래스도어는 접근 차단(403)이나 robots.txt 제한으로, 링크드인·피플앤잡·하이브레인은 robots.txt가 전체 수집을 금지해 자동 수집하지 않습니다.
 
 `track`은 더파운더즈 ID, 점핏 숫자 ID, 또는 수집된 공고의 URL을 받습니다.
 

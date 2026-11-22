@@ -53,6 +53,30 @@ def test_saramin_maps_experience_and_open_ended_deadlines():
     assert job["deadline_date"] is None and "경력 3년 이상" in job["requirements"]
 
 
+def test_linkareer_body_is_split_into_sections():
+    body = ("<p>[업무내용]</p><p>- Airflow 파이프라인 운영</p><p>[자격요건]</p>"
+            "<p>• 경력: 5년 이상</p><p>[우대사항]</p><p>• dbt 경험</p><p>[채용절차]</p><p>서류 → 면접</p>")
+    activity = {"id": "7", "title": "[CJ ENM] 애널리틱스 엔지니어", "organizationName": "CJ ENM",
+                "jobTypes": ["EXPERIENCED"], "recruitCloseAt": 1796137199999}
+    job = sources.linkareer_job(activity, body)
+    assert job["url"] == "https://linkareer.com/activity/7" and job["deadline_date"] == "2026-12-01"
+    assert job["duties"] == ["Airflow 파이프라인 운영"]
+    assert job["requirements"] == ["경력: 5년 이상"] and job["preferred_requirements"] == ["dbt 경험"]
+
+
+def test_work24_list_item_maps_career_and_deadline():
+    from xml.etree import ElementTree
+    node = ElementTree.fromstring(
+        "<wanted><company>테스트</company><title>빅데이터 엔지니어 신입</title><career>신입</career>"
+        "<closeDt>26-12-01</closeDt><wantedInfoUrl>https://www.work24.go.kr/x?id=1</wantedInfoUrl>"
+        "<indTpNm>소프트웨어 개발</indTpNm></wanted>")
+    job = sources.work24_job(node, "빅데이터")
+    assert job["deadline_date"] == "2026-12-01" and job["entry_level_eligible"]
+    assert job["requirements"] == ["경력: 신입"] and job["duties"] == ["빅데이터", "소프트웨어 개발"]
+    node.find("closeDt").text = "채용시까지 26-12-31"
+    assert sources.work24_job(node)["deadline_date"] is None
+
+
 def test_collect_source_fetches_only_new_or_changed_listings():
     fetched = []
 

@@ -129,10 +129,17 @@ def run_daily(db, session, limit, now):
     runs.append(("jumpit", lambda: collect_source(
         db, sources.jumpit_entries(session, max_years), now, max(limit, sources.JUMPIT_DAILY_DETAILS),
         fetch=lambda item: sources.jumpit_fetch(session, item))))
+    runs.append(("linkareer", lambda: collect_source(
+        db, sources.linkareer_entries(session), now, max(limit, sources.LINKAREER_DAILY_DETAILS),
+        fetch=lambda item: sources.linkareer_fetch(session, item))))
     key = os.environ.get("SARAMIN_ACCESS_KEY")
     if key:
         runs.append(("saramin", lambda: collect_source(
             db, sources.saramin_entries(session, key, max_years), now, limit)))
+    work24_key = os.environ.get("WORK24_AUTH_KEY")
+    if work24_key:
+        runs.append(("work24", lambda: collect_source(
+            db, sources.work24_entries(session, work24_key), now, limit)))
     for name, run in runs:
         try:
             outcome = run()
