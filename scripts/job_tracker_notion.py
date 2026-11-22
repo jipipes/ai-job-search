@@ -22,18 +22,28 @@ class TrackerFields:
     deadline: str = "마감일"
     planned: str = "지원 예정"
     stage_type: str = "select"
-    applied_date: str = ""
+    applied: str = ""
 
     @classmethod
     def from_environment(cls):
         defaults = cls()
-        fields = cls(**{
+        values = {
             key: os.environ.get(f"JOB_TRACKER_{key.upper()}", value)
             for key, value in vars(defaults).items()
-        })
+        }
+        if not values["applied"]:
+            values["applied"] = os.environ.get("JOB_TRACKER_APPLIED_DATE", "")
+        fields = cls(**values)
         if fields.stage_type not in {"select", "status"}:
             raise ValueError("JOB_TRACKER_STAGE_TYPE must be select or status")
         return fields
+
+
+def has_value(prop):
+    """True when a Notion property value is filled in (date, select, checkbox, text...)."""
+    if "type" in prop:
+        return bool(prop.get(prop["type"]))
+    return any(prop.values())
 
 
 def notion_query(session, data_source, payload):
@@ -82,7 +92,7 @@ def due_reminders(pages, fields, today):
         stage = properties[fields.stage].get(fields.stage_type) or {}
         if stage.get("name") != fields.planned:
             continue
-        if fields.applied_date and properties[fields.applied_date]["date"]:
+        if fields.applied and has_value(properties[fields.applied]):
             continue
         deadline = properties[fields.deadline]["date"]
         if not deadline or not deadline.get("start"):

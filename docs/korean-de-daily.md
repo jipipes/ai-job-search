@@ -64,13 +64,27 @@ export NOTION_DATA_SOURCE_ID
 | 환경 변수 | 기본값 또는 의미 |
 |---|---|
 | `JOB_TRACKER_TITLE` | 공고명 |
-| `JOB_TRACKER_COMPANY` | 회사 |
+| `JOB_TRACKER_COMPANY` | 회사. 빈 값이면 회사 속성 없이 제목을 `회사 / 공고명`으로 저장 |
 | `JOB_TRACKER_URL` | 공고 URL |
 | `JOB_TRACKER_STAGE` | 지원 단계 |
 | `JOB_TRACKER_STAGE_TYPE` | `select`. Notion 상태 속성은 `status` |
 | `JOB_TRACKER_PLANNED` | 지원 예정 |
 | `JOB_TRACKER_DEADLINE` | 마감일 |
-| `JOB_TRACKER_APPLIED_DATE` | 선택 사항. 지원일 속성 이름을 지정하면 날짜가 채워진 공고를 제외 |
+| `JOB_TRACKER_APPLIED` | 선택 사항. 지원 여부를 나타내는 속성 이름. 날짜·선택·체크박스 등 값이 채워진 공고는 알림에서 제외. 예전 이름 `JOB_TRACKER_APPLIED_DATE`도 인식 |
+
+기존 Job Tracker의 `Job DB`(데이터 소스 `153c45a9-b32a-81d4-a652-000b4c2d862c`)는 아래처럼 매핑합니다. `Status=Document`이고 `지원`이 비어 있으면 아직 지원하지 않은 공고로 보고, 서류를 내면 `지원`을 `서류`로 바꿉니다. `Schedule`은 마감일로 사용합니다.
+
+```bash
+NOTION_DATA_SOURCE_ID=153c45a9-b32a-81d4-a652-000b4c2d862c
+JOB_TRACKER_TITLE=Name
+JOB_TRACKER_COMPANY=
+JOB_TRACKER_URL=JD
+JOB_TRACKER_STAGE=Status
+JOB_TRACKER_STAGE_TYPE=select
+JOB_TRACKER_PLANNED=Document
+JOB_TRACKER_DEADLINE=Schedule
+JOB_TRACKER_APPLIED=지원
+```
 
 ## Slack 마감 알림
 

@@ -50,3 +50,25 @@ def test_notion_reuses_existing_page_and_creates_with_planned_status():
     session.post.side_effect = [query]
     assert not jobs.register_notion(session, "source", job)["created"]
     assert session.post.call_count == 1
+
+
+def test_notion_puts_company_in_title_when_no_company_property():
+    session = Mock()
+    query = Mock()
+    create = Mock()
+    query.json.return_value = {"results": []}
+    create.json.return_value = {"url": "https://www.notion.so/example"}
+    session.post.side_effect = [query, create]
+    fields = jobs.TrackerFields(title="Name", company="", url="JD", stage="Status",
+                                planned="Document", deadline="Schedule")
+    job = {"url": "https://example.org/job", "title": "BI & Data Engineer",
+           "company": "ANUA", "deadline_date": "2026-12-01"}
+    assert jobs.register_notion(session, "source", job, fields)["created"]
+    assert session.post.call_args_list[0].kwargs["json"]["filter"]["property"] == "JD"
+    properties = session.post.call_args.kwargs["json"]["properties"]
+    assert properties == {
+        "Name": {"title": [{"text": {"content": "ANUA / BI & Data Engineer"}}]},
+        "JD": {"url": "https://example.org/job"},
+        "Status": {"select": {"name": "Document"}},
+        "Schedule": {"date": {"start": "2026-12-01"}},
+    }

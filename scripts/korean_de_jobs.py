@@ -86,12 +86,16 @@ def register_notion(session, data_source, job, fields=TrackerFields()):
     if matches:
         return {"created": False, "notion_url": matches[0]["url"]}
 
+    title = job["title"]
+    if not fields.company and job["company"]:
+        title = f"{job['company']} / {title}"
     properties = {
-        fields.title: {"title": [{"text": {"content": job["title"]}}]},
-        fields.company: {"rich_text": [{"text": {"content": job["company"]}}]},
+        fields.title: {"title": [{"text": {"content": title}}]},
         fields.url: {"url": job["url"]},
         fields.stage: {fields.stage_type: {"name": fields.planned}},
     }
+    if fields.company:
+        properties[fields.company] = {"rich_text": [{"text": {"content": job["company"]}}]}
     if job["deadline_date"]:
         properties[fields.deadline] = {"date": {"start": job["deadline_date"]}}
     response = session.post(
