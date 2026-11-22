@@ -50,3 +50,41 @@ export NOTION_DATA_SOURCE_ID
 ```
 
 처음 등록하면 상태는 `지원 예정`입니다. 이미 같은 공고 URL이 있으면 기존 Notion 페이지 주소를 반환합니다. 공고를 등록한 뒤 지원서 제출은 해당 채용 사이트에서 진행합니다.
+
+## 기존 Job Tracker 데이터 소스에 맞추기
+
+[기존 Job Tracker](https://app.notion.com/p/Job-Tracker-153c45a9b32a8008988bd7ef5537de24)의 데이터베이스를 연결에 공유한 뒤 해당 데이터 소스 ID를 설정합니다. 링크의 페이지 ID는 데이터 소스 ID와 다를 수 있습니다. 속성 이름이나 값이 위 예시와 다르면 읽기 전용 명령으로 확인합니다.
+
+```bash
+.venv/bin/python -m scripts.korean_de_jobs notion-schema
+```
+
+기존 속성에 맞춰 다음 환경 변수 중 필요한 값만 설정합니다.
+
+| 환경 변수 | 기본값 또는 의미 |
+|---|---|
+| `JOB_TRACKER_TITLE` | 공고명 |
+| `JOB_TRACKER_COMPANY` | 회사 |
+| `JOB_TRACKER_URL` | 공고 URL |
+| `JOB_TRACKER_STAGE` | 지원 단계 |
+| `JOB_TRACKER_STAGE_TYPE` | `select`. Notion 상태 속성은 `status` |
+| `JOB_TRACKER_PLANNED` | 지원 예정 |
+| `JOB_TRACKER_DEADLINE` | 마감일 |
+| `JOB_TRACKER_APPLIED_DATE` | 선택 사항. 지원일 속성 이름을 지정하면 날짜가 채워진 공고를 제외 |
+
+## Slack 마감 알림
+
+Slack 앱에서 Incoming Webhook을 추가하고 받을 채널을 지정합니다. 웹훅 URL을 `SLACK_WEBHOOK_URL`로 설정합니다. 자동 실행 시 Notion 인증, 속성 매핑, Slack 웹훅은 작업 스케줄러가 읽을 수 있는 환경에 설정합니다. 토큰과 웹훅이 들어 있는 파일은 Git 저장소 밖에 보관합니다.
+
+```bash
+.venv/bin/python -m scripts.korean_de_jobs remind --dry-run
+.venv/bin/python -m scripts.korean_de_jobs remind
+```
+
+`--dry-run`으로 후보를 확인한 뒤, 발송 명령을 별도의 Windows 작업에 추가해 매일 실행합니다. 예를 들어 Ubuntu의 `~/.config/job-tracker.env`에 권한 `600`을 부여해 환경 변수를 보관했다면 작업 스케줄러의 `wsl.exe` 인수를 아래처럼 설정할 수 있습니다.
+
+```text
+-d Ubuntu -u soojin --cd /home/soojin/projects/job-search-agent -- bash -c "set -a; source ~/.config/job-tracker.env && exec .venv/bin/python -m scripts.korean_de_jobs remind"
+```
+
+알림은 한국 날짜 기준 D-7, D-5, D-3, D-1, 마감 당일에 보냅니다. 매 실행마다 Notion의 현재 상태와 마감일을 읽습니다. `채용 시 마감`처럼 마감일이 비어 있거나 지원한 공고는 대상에서 제외됩니다. 발송이 성공한 공고·마감일·알림 시점 조합은 같은 SQLite 파일에 기록합니다. PC가 꺼져 실행을 놓친 날의 알림은 소급 발송되지 않습니다.
