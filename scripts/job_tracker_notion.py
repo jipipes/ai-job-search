@@ -105,11 +105,15 @@ def due_reminders(pages, fields, today):
                    "days_left": days_left, "notion_url": page["url"]}
 
 
-def send_reminders(db, session, webhook, reminders):
+def check_webhook(webhook, name="SLACK_WEBHOOK_URL"):
     parts = urlsplit(webhook)
     if (parts.scheme != "https" or parts.netloc not in {"hooks.slack.com", "hooks.slack-gov.com"}
             or not parts.path.startswith("/services/")):
-        raise ValueError("SLACK_WEBHOOK_URL must be a Slack incoming webhook URL")
+        raise ValueError(f"{name} must be a Slack incoming webhook URL")
+
+
+def send_reminders(db, session, webhook, reminders):
+    check_webhook(webhook)
     db.execute("""CREATE TABLE IF NOT EXISTS deadline_reminders (
         page_id TEXT NOT NULL, deadline TEXT NOT NULL, days_left INTEGER NOT NULL,
         PRIMARY KEY (page_id, deadline, days_left)

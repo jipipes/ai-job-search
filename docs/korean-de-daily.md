@@ -9,12 +9,21 @@
 
 `daily`는 더파운더즈 공식 사이트맵을 확인해 신규 공고와 본문이 변경된 공고를 보여줍니다. 실행당 최대 15건을 읽으며, `remaining`은 다음 실행에서 처리할 건수입니다. `jobs`는 이미 수집한 공고를 보여줍니다. SQLite 파일은 `results/korean_de_jobs.sqlite3`에 저장됩니다. 사이트맵 수정 시각이 그대로인 공고도 7일 후에 재확인합니다.
 
+## 신규 데이터 직무 공고 Slack 알림
+
+`daily` 결과의 각 공고에는 `relevant`, `data_matches`, `min_years`가 붙습니다. 직무명이 데이터 엔지니어·애널리틱스 엔지니어·백엔드·FDE 등으로 섞여 있어 제목 대신 주요 업무·자격 요건·우대 사항의 내용을 봅니다.
+
+- `data_matches`: 본문에서 찾은 데이터 작업 표현(SQL, Airflow, dbt, Spark, Kafka, 파이프라인, DW/DL 등). 2개 이상이면 데이터 직무로 봅니다.
+- `min_years`: 자격 요건(우대 사항 제외)에 적힌 최소 경력 연수. 3년 이상이면 제외합니다.
+
+`SLACK_NEW_POSTINGS_WEBHOOK_URL`을 설정하면 `relevant`인 공고를 한 메시지로 묶어 보냅니다. 같은 공고는 한 번만 보내며 기록은 SQLite의 `posting_notifications`에 남깁니다. 기준은 `scripts/posting_filter.py`의 `DATA_TERMS`, `MIN_DATA_MATCHES`, `MAX_YEARS`에서 조정합니다.
+
 ## 윈도우에서 매일 실행
 
 Windows 작업 스케줄러에서 기본 작업을 만들고 매일 원하는 시각에 시작하도록 설정합니다. 프로그램은 `wsl.exe`, 인수는 아래처럼 지정합니다. Ubuntu 사용자명이나 설치한 배포판 이름이 다르면 변경합니다.
 
 ```text
--d Ubuntu -u soojin --cd /home/soojin/projects/job-search-agent -- bash -c ".venv/bin/python -m scripts.korean_de_jobs daily > results/korean_de_daily.json"
+-d Ubuntu -u soojin --cd /home/soojin/projects/job-search-agent -- bash -c "set -a; source ~/.config/job-tracker.env && exec .venv/bin/python -m scripts.korean_de_jobs daily > results/korean_de_daily.json"
 ```
 
 실행 결과는 프로젝트의 `results/korean_de_daily.json`에서 확인합니다. PC가 꺼져 있던 날도 다음 로그인 이후 실행되길 원하면 작업 설정에서 예약된 시작을 놓친 경우 가능한 한 빨리 작업을 실행하는 옵션을 켭니다.

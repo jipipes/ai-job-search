@@ -14,6 +14,7 @@ from xml.etree import ElementTree
 
 import requests
 
+from scripts import posting_filter
 from scripts import thefounders_jobs as founders
 from scripts.job_tracker_notion import (
     NOTION_API, SEOUL, TrackerFields, due_reminders, planned_pages,
@@ -63,6 +64,8 @@ def collect(db, session, limit, now):
                 "title": job["title"],
                 "url": url,
                 "entry_level_eligible": job["entry_level_eligible"],
+                "deadline_date": job.get("deadline_date"),
+                **posting_filter.review(job),
             })
         db.execute(
             """INSERT INTO postings (url, lastmod, checked_at, payload) VALUES (?, ?, ?, ?)
@@ -134,6 +137,14 @@ def main():
             if args.command == "daily":
                 db.execute("BEGIN IMMEDIATE")
                 result = collect(db, session, args.limit, datetime.now(SEOUL))
+                webhook = os.environ.get("SLACK_NEW_POSTINGS_WEBHOOK_URL")
+                relevant = [item for item in result["changes"] if item["relevant"]]
+                if webhook and relevant:
+                    with requests.Session() as slack:
+                        notice = posting_filter.notify_new_postings(db, slack, webhook, relevant)
+                    result["slack"] = notice
+                    if notice.get("error"):
+                        result["errors"].append({"slack": notice["error"]})
             elif args.command == "jobs":
                 result = [
                     json.loads(payload) for (payload,) in db.execute(
