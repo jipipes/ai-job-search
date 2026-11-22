@@ -77,6 +77,21 @@ def test_work24_list_item_maps_career_and_deadline():
     assert sources.work24_job(node)["deadline_date"] is None
 
 
+def test_daily_runs_only_enabled_sources(monkeypatch):
+    calls = []
+    monkeypatch.setattr(jobs, "collect", lambda *args: calls.append("thefounders"))
+    monkeypatch.setattr(jobs, "collect_source", lambda db, entries, *args, **kwargs: (
+        calls.append("source"), {"discovered": 0, "remaining": 0, "changes": [], "errors": []})[1])
+    monkeypatch.delenv("JOB_SOURCES", raising=False)
+    monkeypatch.delenv("SARAMIN_ACCESS_KEY", raising=False)
+    monkeypatch.delenv("WORK24_AUTH_KEY", raising=False)
+    result = jobs.run_daily(None, Mock(), 15, datetime(2026, 11, 23, tzinfo=jobs.SEOUL))
+    assert "thefounders" not in calls and set(result["sources"]) == {"jumpit", "linkareer"}
+    monkeypatch.setenv("JOB_SOURCES", "linkareer")
+    result = jobs.run_daily(None, Mock(), 15, datetime(2026, 11, 23, tzinfo=jobs.SEOUL))
+    assert set(result["sources"]) == {"linkareer"}
+
+
 def test_collect_source_fetches_only_new_or_changed_listings():
     fetched = []
 

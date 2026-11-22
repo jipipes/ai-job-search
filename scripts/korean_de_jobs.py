@@ -121,10 +121,18 @@ def collect_source(db, entries, now, limit, fetch=None, pause=1.0):
             "changes": changes, "errors": errors}
 
 
+DEFAULT_SOURCES = "jumpit,linkareer,saramin,work24"
+
+
 def run_daily(db, session, limit, now):
-    """Run every configured source; one failing source does not stop the others."""
+    """Run every enabled source; one failing source does not stop the others.
+
+    ``JOB_SOURCES`` (comma separated) picks the sources. The Founders is off by
+    default; add ``thefounders`` to turn it back on.
+    """
     result = {"checked_at": now.isoformat(), "sources": {}, "changes": [], "errors": []}
     max_years = posting_filter.MAX_YEARS
+    enabled = {name.strip() for name in os.environ.get("JOB_SOURCES", DEFAULT_SOURCES).split(",")}
     runs = [("thefounders", lambda: collect(db, session, limit, now))]
     runs.append(("jumpit", lambda: collect_source(
         db, sources.jumpit_entries(session, max_years), now, max(limit, sources.JUMPIT_DAILY_DETAILS),
@@ -141,6 +149,8 @@ def run_daily(db, session, limit, now):
         runs.append(("work24", lambda: collect_source(
             db, sources.work24_entries(session, work24_key), now, limit)))
     for name, run in runs:
+        if name not in enabled:
+            continue
         try:
             outcome = run()
         except (requests.RequestException, ValueError, KeyError, ElementTree.ParseError) as error:
